@@ -1,4 +1,8 @@
+
 import { useState, useRef, useEffect } from "react";
+
+const AI_BASE_URL =
+    "https://weather-ai-backend-uaur.onrender.com/api/ai";
 
 function AIChat({ currentCity = "Delhi" }) {
   const [question, setQuestion] = useState("");
@@ -12,9 +16,10 @@ function AIChat({ currentCity = "Delhi" }) {
     }
   ]);
 
-  // Messages add hone par auto-scroll neche karne ke liye
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth"
+    });
   };
 
   useEffect(() => {
@@ -27,103 +32,107 @@ function AIChat({ currentCity = "Delhi" }) {
     if (!question.trim() || isLoading) return;
 
     const userQuery = question.trim();
-    const userMessage = { role: "user", text: userQuery };
 
-    // User Message immediately render karein
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: userQuery }
+    ]);
+
     setQuestion("");
     setIsLoading(true);
 
     try {
-      // Spring Boot backend API Endpoint
-      const response = await fetch("http://localhost:8080/api/ai/ask", {
+      const response = await fetch(`${AI_BASE_URL}/ask`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          // Agar JWT Auth lagaya hai to authorization header:
-          // "Authorization": `Bearer ${token}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           prompt: userQuery,
-          city: currentCity // Weather-aware context
-        }),
+          city: currentCity
+        })
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to get response from AI server.");
+        throw new Error(
+            data.message || `Server error: ${response.status}`
+        );
       }
 
-      const data = await response.json(); // Backend should return { reply: "..." }
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          text: data.reply || "No response received from AI."
+        }
+      ]);
+
+    } catch (error) {
+      console.error("AI Error:", error);
 
       setMessages((prev) => [
         ...prev,
         {
           role: "ai",
-          text: data.reply || "Sorry, I couldn't process that request."
+          text: "⚠️ Unable to connect to WeatherSense AI. Please try again."
         }
       ]);
-    } catch (error) {
-      console.error("AI Error:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          text: "⚠️ Server error! Unable to reach WeatherSense AI backend right now."
-        }
-      ]);
+
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="ai-chat">
+      <div className="ai-chat">
+        <div className="chat-messages">
 
-      <div className="chat-messages">
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`message ${message.role}`}
+          {messages.map((message, index) => (
+              <div
+                  key={index}
+                  className={`message ${message.role}`}
+              >
+                <div className="avatar">
+                  {message.role === "ai" ? "✨" : "👤"}
+                </div>
+
+                <div className="message-content">
+                  {message.text}
+                </div>
+              </div>
+          ))}
+
+          {isLoading && (
+              <div className="message ai loading">
+                <div className="avatar">✨</div>
+                <div className="message-content">
+                  <span>WeatherSense AI is thinking...</span>
+                </div>
+              </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        <form className="chat-input" onSubmit={handleSubmit}>
+          <input
+              type="text"
+              placeholder="Ask AI about weather or farming..."
+              value={question}
+              disabled={isLoading}
+              onChange={(e) => setQuestion(e.target.value)}
+          />
+
+          <button
+              type="submit"
+              disabled={isLoading || !question.trim()}
           >
-            <div className="avatar">
-              {message.role === "ai" ? "✨" : "👤"}
-            </div>
-
-            <div className="message-content">
-              {message.text}
-            </div>
-          </div>
-        ))}
-
-        {/* Loading Indicator */}
-        {isLoading && (
-          <div className="message ai loading">
-            <div className="avatar">✨</div>
-            <div className="message-content">
-              <span>WeatherSense AI is thinking...</span>
-            </div>
-          </div>
-        )}
-
-        {/* Scroll anchor */}
-        <div ref={messagesEndRef} />
+            {isLoading ? "..." : "→"}
+          </button>
+        </form>
       </div>
-
-      <form className="chat-input" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Ask AI: e.g. Is it a good day to water crops in Delhi?"
-          value={question}
-          disabled={isLoading}
-          onChange={(e) => setQuestion(e.target.value)}
-        />
-
-        <button type="submit" disabled={isLoading || !question.trim()}>
-          {isLoading ? "..." : "→"}
-        </button>
-      </form>
-
-    </div>
   );
 }
 
