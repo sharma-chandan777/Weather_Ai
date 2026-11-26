@@ -1,4 +1,4 @@
-const AI_BASE_URL = "http://localhost:8080/api/ai";
+const AI_BASE_URL = "https://weather-ai-backend-uaur.onrender.com";
 
 /**
  * AI Chatbot Query Handler
