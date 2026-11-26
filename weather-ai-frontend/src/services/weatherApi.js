@@ -1,6 +1,7 @@
 import { mapWmoToCondition, getAqiStatus } from "../utils/weatherUtils";
 
-const BASE_URL = "https://weather-ai-backend-uaur.onrender.com";
+const BASE_URL =
+    "https://weather-ai-backend-uaur.onrender.com/api/weather";
 
 export async function getWeatherByCity(city = "Shimla") {
   try {
