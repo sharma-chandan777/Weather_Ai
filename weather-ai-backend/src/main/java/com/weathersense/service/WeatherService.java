@@ -46,6 +46,7 @@ public class WeatherService {
             JsonNode current = root.get("current");
 
             int weatherCode = current.has("weather_code") ? current.get("weather_code").asInt() : 0;
+            int isDay = current.path("is_day").asInt(-1);
             String condition = weatherCondition(weatherCode);
             String icon = weatherIcon(weatherCode);
 
@@ -79,6 +80,7 @@ public class WeatherService {
                     uvIndex,
                     uvLevel,
                     weatherCode,
+                    isDay,
                     condition,
                     icon,
                     agriTitle,

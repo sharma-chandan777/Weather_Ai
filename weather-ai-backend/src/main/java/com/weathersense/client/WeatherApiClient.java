@@ -30,6 +30,7 @@ public class WeatherApiClient {
                                         "relative_humidity_2m," +
                                         "apparent_temperature," +
                                         "weather_code," +
+                                        "is_day," +
                                         "surface_pressure," +
                                         "wind_speed_10m," +
                                         "visibility," +

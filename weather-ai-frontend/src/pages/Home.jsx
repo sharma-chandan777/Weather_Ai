@@ -83,7 +83,7 @@ function Home({
             city={city}
 
             condition={weatherData?.condition}
-
+            weatherCode={weatherData?.weatherCode}
             icon={weatherData?.icon}
 
             temp={weatherData?.temp}
@@ -95,6 +95,8 @@ function Home({
             windSpeed={weatherData?.windSpeed}
 
             visibility={weatherData?.visibility}
+
+            isDay={weatherData?.isDay}
 
           />
 

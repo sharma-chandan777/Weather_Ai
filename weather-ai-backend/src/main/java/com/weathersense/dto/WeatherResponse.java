@@ -16,6 +16,7 @@ public record WeatherResponse(
         double uvIndex,        // WeatherStats ke liye
         String uvLevel,        // e.g., "Moderate", "High"
         int weatherCode,
+        int isDay,
         String condition,
         String icon,           // Weather emoji / icon string
 

@@ -6,29 +6,47 @@ const BASE_URL =
 export async function getWeatherByCity(city = "Shimla") {
   try {
     // 1. Fetch Current Weather
-    const currRes = await fetch(`${BASE_URL}/current?city=${encodeURIComponent(city)}`);
-    const currData = currRes.ok ? await currRes.json() : {};
 
-    const wCode = currData?.weatherCode ?? currData?.weathercode ?? 0;
+    const currRes = await fetch(
+        `${BASE_URL}/current?city=${encodeURIComponent(city)}`
+    );
+
+    if (!currRes.ok) {
+      throw new Error(`Weather API failed: ${currRes.status}`);
+    }
+
+    const currData = await currRes.json();
+
+// Missing temperature ko fake 25°C se replace nahi karna
+    const temp = currData?.temp ?? currData?.temperature;
+
+    if (temp == null || !Number.isFinite(Number(temp))) {
+      throw new Error("Valid temperature missing from backend response");
+    }
+
+    const wCode = currData?.weatherCode ?? currData?.weathercode;
+
     const conditionInfo = mapWmoToCondition(wCode);
 
     const weatherData = {
-      temp: currData?.temp ?? currData?.temperature ?? 25,
-      condition: conditionInfo?.label || "Clear",
+      temp: Number(temp),
+      condition: currData?.condition ?? conditionInfo.label,
       weatherCode: wCode,
-      icon: conditionInfo?.icon || "☀️",
-      feelsLike: currData?.feelsLike ?? currData?.apparent_temperature ?? 25,
-      humidity: currData?.humidity ?? currData?.relative_humidity ?? 45,
-      windSpeed: currData?.windSpeed ?? currData?.windspeed ?? 10,
-      visibility: "10",
-      pressure: "1013",
-      uvIndex: "5",
-      uvLevel: "Moderate",
-      agriTitle: "Farming Conditions",
-      agriDescription: "Optimal weather conditions for field work.",
-      agriStatusLevel: "optimal",
-      agriStatusText: "GOOD"
+      icon: currData?.icon ?? conditionInfo.icon,
+      feelsLike: currData?.feelsLike ?? currData?.apparent_temperature ?? null,
+      humidity: currData?.humidity ?? currData?.relative_humidity_2m ?? null,
+      windSpeed: currData?.windSpeed ?? currData?.wind_speed_10m ?? null,
+      visibility: currData?.visibility ?? null,
+      isDay: currData?.isDay ?? currData?.is_day ?? null,
+      pressure: currData?.pressure ?? null,
+      uvIndex: currData?.uvIndex ?? null,
+      uvLevel: currData?.uvLevel ?? null,
+      agriTitle: currData?.agriTitle,
+      agriDescription: currData?.agriDescription,
+      agriStatusLevel: currData?.agriStatusLevel,
+      agriStatusText: currData?.agriStatusText
     };
+
 
     // 2. Fetch Forecast (Agar backend error de ya empty ho, toh safe fallback use karega)
     let forecastData = [];

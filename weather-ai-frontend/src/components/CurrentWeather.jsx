@@ -1,17 +1,24 @@
 import { getWeatherDetails } from "../utils/weatherUtils";
 
-function CurrentWeather({ 
-  city = "Select a City", 
-  weatherCode,          // Open-Meteo se aane wala numeric code (e.g. 0, 61, 95)
-  condition,            // Fallback string condition
-  temp = "--", 
-  feelsLike = "--", 
-  humidity = "--", 
-  windSpeed = "--", 
-  visibility = "--" 
-}) {
+function CurrentWeather({
+                          city = "Select a City",
+                          weatherCode,
+                          isDay,
+                          condition,
+                          temp = "--",
+                          feelsLike = "--",
+                          humidity = "--",
+                          windSpeed = "--",
+                          visibility = "--"
+                        }) {
   // Weather code pass karke dynamic icon, label, aur dynamic background class extract karein
-  const { icon, label, bgClass } = getWeatherDetails(weatherCode || condition);
+  const { icon, label, bgClass } =
+      getWeatherDetails(weatherCode ?? condition);
+
+  const displayIcon =
+      Number(isDay) === 0 && Number(weatherCode) === 0
+          ? "🌙"
+          : icon;
 
   return (
     // bgClass se weather ke hisab se gradient color change hoga (Rainy par Dark, Sunny par Orange)
@@ -28,7 +35,7 @@ function CurrentWeather({
 
         {/* Dynamic Icon yahan render hoga */}
         <div className="weather-icon text-5xl">
-          {icon}
+          {displayIcon}
         </div>
       </div>
 
