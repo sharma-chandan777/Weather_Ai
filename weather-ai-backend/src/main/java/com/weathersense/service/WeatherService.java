@@ -90,7 +90,13 @@ public class WeatherService {
             );
 
         } catch (Exception e) {
-            throw new RuntimeException("Unable to fetch weather for " + city, e);
+            System.err.println("===== WEATHER API ERROR =====");
+            e.printStackTrace();
+            System.err.println("==============================");
+
+            throw new RuntimeException(
+                    "Unable to fetch weather for " + city, e
+            );
         }
     }
 
