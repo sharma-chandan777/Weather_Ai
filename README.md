@@ -100,7 +100,7 @@ React components display the weather dashboard and insights.
 📂 Project Structure
 Frontend Architecture
 
-text
+text*
 frontend/
 │
 ├── assets/
@@ -132,7 +132,7 @@ services/ – API communication and data handling.
 utils/ – Weather code mapping and AQI status utilities.
 Backend Architecture
 
-text
+text*
 backend/
 │
 └── src/
