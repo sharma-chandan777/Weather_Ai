@@ -147,7 +147,7 @@ export async function getWeatherByCity(city = "Shimla") {
       throw new Error("Invalid forecast data format");
     }
 
-    forecastData = list.slice(0, 5).map((item, index) => {
+    forecastData = list.slice(0, 3).map((item, index) => {
       const code =
           item?.weatherCode ??
           item?.weathercode ??

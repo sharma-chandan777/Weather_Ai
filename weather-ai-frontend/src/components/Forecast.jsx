@@ -4,7 +4,7 @@ function Forecast({ forecastData = [] }) {
   return (
     <section className="weather-card forecast-card">
       <div className="card-title">
-        <h3>5-Day Forecast</h3>
+        <h3>3-Day Forecast</h3>
         <span>Next days</span>
       </div>
 
