@@ -1,100 +1,245 @@
-import { mapWmoToCondition, getAqiStatus } from "../utils/weatherUtils";
+
+import { mapWmoToCondition } from "../utils/weatherUtils";
 
 const BASE_URL =
     "https://weather-ai-backend-uaur.onrender.com/api/weather";
 
-export async function getWeatherByCity(city = "Shimla") {
+// Common API request handler
+async function fetchWeatherApi(endpoint) {
+  const url = `${BASE_URL}${endpoint}`;
+
   try {
-    // 1. Fetch Current Weather
+    console.log("Requesting:", url);
 
-    const currRes = await fetch(
-        `${BASE_URL}/current?city=${encodeURIComponent(city)}`
-    );
+    const response = await fetch(url);
 
-    if (!currRes.ok) {
-      throw new Error(`Weather API failed: ${currRes.status}`);
+    const responseText = await response.text();
+
+    console.log("HTTP Status:", response.status);
+    console.log("Backend Response:", responseText);
+
+    if (!response.ok) {
+      throw new Error(
+          `Backend Error ${response.status}: ${
+              responseText || response.statusText
+          }`
+      );
     }
 
-    const currData = await currRes.json();
-
-// Missing temperature ko fake 25°C se replace nahi karna
-    const temp = currData?.temp ?? currData?.temperature;
-
-    if (temp == null || !Number.isFinite(Number(temp))) {
-      throw new Error("Valid temperature missing from backend response");
-    }
-
-    const wCode = currData?.weatherCode ?? currData?.weathercode;
-
-    const conditionInfo = mapWmoToCondition(wCode);
-
-    const weatherData = {
-      temp: Number(temp),
-      condition: currData?.condition ?? conditionInfo.label,
-      weatherCode: wCode,
-      icon: currData?.icon ?? conditionInfo.icon,
-      feelsLike: currData?.feelsLike ?? currData?.apparent_temperature ?? null,
-      humidity: currData?.humidity ?? currData?.relative_humidity_2m ?? null,
-      windSpeed: currData?.windSpeed ?? currData?.wind_speed_10m ?? null,
-      visibility: currData?.visibility ?? null,
-      isDay: currData?.isDay ?? currData?.is_day ?? null,
-      pressure: currData?.pressure ?? null,
-      uvIndex: currData?.uvIndex ?? null,
-      uvLevel: currData?.uvLevel ?? null,
-      agriTitle: currData?.agriTitle,
-      agriDescription: currData?.agriDescription,
-      agriStatusLevel: currData?.agriStatusLevel,
-      agriStatusText: currData?.agriStatusText
-    };
-
-
-    // 2. Fetch Forecast (Agar backend error de ya empty ho, toh safe fallback use karega)
-    let forecastData = [];
     try {
-      const foreRes = await fetch(`${BASE_URL}/forecast?city=${encodeURIComponent(city)}`);
-      if (foreRes.ok) {
-        const foreData = await foreRes.json();
-        const list = Array.isArray(foreData) ? foreData : (foreData?.daily || foreData?.forecastList || []);
-        
-        forecastData = list.slice(0, 5).map((item, index) => ({
-          day: item?.day || (item?.time ? new Date(item.time).toLocaleDateString("en-US", { weekday: "short" }) : `Day ${index + 1}`),
-          tempMax: item?.tempMax ?? item?.temperature_2m_max ?? 28,
-          tempMin: item?.tempMin ?? item?.temperature_2m_min ?? 18,
-          icon: mapWmoToCondition(item?.weatherCode ?? 0)?.icon || "☀️",
-          pop: item?.pop ?? 10
-        }));
-      }
-    } catch (e) {
-      console.warn("Forecast endpoint failed, using fallback data");
+      return JSON.parse(responseText);
+    } catch {
+      throw new Error("Invalid JSON response from backend");
     }
-
-    // Fallback agar forecast empty aaye
-    if (forecastData.length === 0) {
-      forecastData = [
-        { day: "Today", tempMax: 26, tempMin: 18, icon: "☀️", pop: 10 },
-        { day: "Tue", tempMax: 24, tempMin: 16, icon: "⛅", pop: 20 },
-        { day: "Wed", tempMax: 22, tempMin: 15, icon: "🌧️", pop: 60 },
-        { day: "Thu", tempMax: 25, tempMin: 17, icon: "☀️", pop: 5 },
-        { day: "Fri", tempMax: 27, tempMin: 19, icon: "☀️", pop: 0 },
-      ];
-    }
-
-    const airQualityData = {
-      aqi: 45,
-      status: "Good",
-      description: "Air quality is satisfactory.",
-      pm25: "22",
-      pm10: "45",
-      co: "0.4"
-    };
-
-    return { weatherData, forecastData, airQualityData };
   } catch (error) {
-    console.error("API Error in getWeatherByCity:", error);
+    console.error("Weather API Error:", error);
     throw error;
   }
 }
 
-export const getCurrentWeather = async (city) => (await getWeatherByCity(city)).weatherData;
-export const getForecast = async (city) => (await getWeatherByCity(city)).forecastData;
-export const getAirQuality = async (city) => (await getWeatherByCity(city)).airQualityData;
+// Fetch complete weather data
+export async function getWeatherByCity(city = "Shimla") {
+  if (typeof city !== "string" || !city.trim()) {
+    throw new Error("Please enter a valid city name");
+  }
+
+  const encodedCity = encodeURIComponent(city.trim());
+
+  // 1. Fetch Current Weather
+  const currData = await fetchWeatherApi(
+      `/current?city=${encodedCity}`
+  );
+
+  const temp = currData?.temp ?? currData?.temperature;
+
+  if (
+      temp == null ||
+      !Number.isFinite(Number(temp))
+  ) {
+    throw new Error(
+        "Valid temperature missing from backend response"
+    );
+  }
+
+  const wCode =
+      currData?.weatherCode ??
+      currData?.weathercode ??
+      0;
+
+  const conditionInfo = mapWmoToCondition(wCode) || {};
+
+  const weatherData = {
+    city: currData?.city ?? city.trim(),
+
+    temp: Number(temp),
+
+    condition:
+        currData?.condition ??
+        conditionInfo.label ??
+        "Unknown",
+
+    weatherCode: wCode,
+
+    icon:
+        currData?.icon ??
+        conditionInfo.icon ??
+        "🌤️",
+
+    feelsLike:
+        currData?.feelsLike ??
+        currData?.apparent_temperature ??
+        null,
+
+    humidity:
+        currData?.humidity ??
+        currData?.relative_humidity_2m ??
+        null,
+
+    windSpeed:
+        currData?.windSpeed ??
+        currData?.wind_speed_10m ??
+        null,
+
+    visibility: currData?.visibility ?? null,
+
+    isDay:
+        currData?.isDay ??
+        currData?.is_day ??
+        null,
+
+    pressure: currData?.pressure ?? null,
+
+    uvIndex: currData?.uvIndex ?? null,
+
+    uvLevel: currData?.uvLevel ?? null,
+
+    agriTitle: currData?.agriTitle ?? "",
+
+    agriDescription:
+        currData?.agriDescription ?? "",
+
+    agriStatusLevel:
+        currData?.agriStatusLevel ?? "",
+
+    agriStatusText:
+        currData?.agriStatusText ?? ""
+  };
+
+  // 2. Fetch Forecast
+  let forecastData = [];
+
+  try {
+    const foreData = await fetchWeatherApi(
+        `/forecast?city=${encodedCity}`
+    );
+
+    // Correct Java ForecastResponse mapping
+    const list = Array.isArray(foreData)
+        ? foreData
+        : (
+            foreData?.forecast ??
+            foreData?.daily ??
+            foreData?.forecastList ??
+            []
+        );
+
+    if (!Array.isArray(list)) {
+      throw new Error("Invalid forecast data format");
+    }
+
+    forecastData = list.slice(0, 5).map((item, index) => {
+      const code =
+          item?.weatherCode ??
+          item?.weathercode ??
+          0;
+
+      const info = mapWmoToCondition(code) || {};
+
+      return {
+        date: item?.date ?? null,
+
+        day:
+            item?.day ??
+            (
+                item?.date
+                    ? new Date(item.date).toLocaleDateString(
+                        "en-US",
+                        { weekday: "short" }
+                    )
+                    : `Day ${index + 1}`
+            ),
+
+        // Correct Java DTO field names
+        tempMax:
+            item?.maxTemp ??
+            item?.tempMax ??
+            null,
+
+        tempMin:
+            item?.minTemp ??
+            item?.tempMin ??
+            null,
+
+        icon:
+            item?.icon ??
+            info.icon ??
+            "🌤️",
+
+        pop:
+            item?.precipitationProbability ??
+            item?.pop ??
+            0,
+
+        condition:
+            item?.condition ??
+            info.label ??
+            "Unknown",
+
+        weatherCode: code
+      };
+    });
+
+    console.log("Forecast Data:", forecastData);
+
+  } catch (error) {
+    console.error(
+        "Forecast API failed:",
+        error.message
+    );
+
+    forecastData = [];
+  }
+
+  // 3. Air Quality
+  // Placeholder: live AQI API is not integrated yet.
+  const airQualityData = {
+    aqi: null,
+    status: "Unavailable",
+    description: "Live air quality data is not connected.",
+    pm25: null,
+    pm10: null,
+    co: null
+  };
+
+  return {
+    weatherData,
+    forecastData,
+    airQualityData
+  };
+}
+
+// Individual functions
+export const getCurrentWeather = async (city) => {
+  const data = await getWeatherByCity(city);
+  return data.weatherData;
+};
+
+export const getForecast = async (city) => {
+  const data = await getWeatherByCity(city);
+  return data.forecastData;
+};
+
+export const getAirQuality = async (city) => {
+  const data = await getWeatherByCity(city);
+  return data.airQualityData;
+};

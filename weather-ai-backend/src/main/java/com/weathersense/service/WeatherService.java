@@ -31,53 +31,72 @@ public class WeatherService {
         this.objectMapper = objectMapper;
     }
 
+    // ================= CURRENT WEATHER =================
+
     public WeatherResponse getCurrentWeather(String city) {
+
+        validateCity(city);
+
         try {
             JsonNode location = findLocation(city);
 
             double latitude = location.get("latitude").asDouble();
             double longitude = location.get("longitude").asDouble();
-            String actualCity = location.get("name").asText();
+            String actualCity = location.path("name").asText(city);
 
-            // Fetch weather through cache
             String response = weatherCacheService.getCachedWeather(
-                    latitude,
-                    longitude
+                    latitude, longitude
             );
 
             JsonNode root = objectMapper.readTree(response);
-            JsonNode current = root.get("current");
 
-            int weatherCode = current.has("weather_code")
-                    ? current.get("weather_code").asInt() : 0;
+            JsonNode current = root.path("current");
 
+            if (!current.isObject()) {
+                throw new IllegalStateException(
+                        "Current weather data missing from weather API"
+                );
+            }
+
+            if (!current.hasNonNull("temperature_2m")) {
+                throw new IllegalStateException(
+                        "Temperature missing from weather API"
+                );
+            }
+
+            int weatherCode = current.path("weather_code").asInt(0);
             int isDay = current.path("is_day").asInt(-1);
+
+            double temp = current.path("temperature_2m").asDouble();
+
+            double feelsLike = current.path(
+                    "apparent_temperature"
+            ).asDouble(temp);
+
+            int humidity = current.path(
+                    "relative_humidity_2m"
+            ).asInt(0);
+
+            double windSpeed = current.path(
+                    "wind_speed_10m"
+            ).asDouble(0.0);
+
+            double visibility = current.path(
+                    "visibility"
+            ).asDouble(10000.0) / 1000.0;
+
+            double pressure = current.path(
+                    "surface_pressure"
+            ).asDouble(1013.25);
+
+            double uvIndex = current.path(
+                    "uv_index"
+            ).asDouble(0.0);
+
+            String uvLevel = getUvLevel(uvIndex);
 
             String condition = weatherCondition(weatherCode);
             String icon = weatherIcon(weatherCode);
-
-            double temp = current.has("temperature_2m")
-                    ? current.get("temperature_2m").asDouble() : 0.0;
-
-            double feelsLike = current.has("apparent_temperature")
-                    ? current.get("apparent_temperature").asDouble() : temp;
-
-            int humidity = current.has("relative_humidity_2m")
-                    ? current.get("relative_humidity_2m").asInt() : 0;
-
-            double windSpeed = current.has("wind_speed_10m")
-                    ? current.get("wind_speed_10m").asDouble() : 0.0;
-
-            double visibility = current.has("visibility")
-                    ? current.get("visibility").asDouble() / 1000.0 : 10.0;
-
-            double pressure = current.has("surface_pressure")
-                    ? current.get("surface_pressure").asDouble() : 1013.25;
-
-            double uvIndex = current.has("uv_index")
-                    ? current.get("uv_index").asDouble() : 0.0;
-
-            String uvLevel = getUvLevel(uvIndex);
 
             String agriTitle = "Crop & Soil Insight";
 
@@ -115,64 +134,101 @@ public class WeatherService {
 
         } catch (Exception e) {
 
-            System.err.println("===== WEATHER API ERROR =====");
+            System.err.println("===== CURRENT WEATHER ERROR =====");
             e.printStackTrace();
-            System.err.println("==============================");
+            System.err.println("=================================");
 
             throw new RuntimeException(
-                    "Unable to fetch weather for " + city, e
+                    "Unable to fetch current weather for " + city
+                            + ": " + e.getMessage(), e
             );
         }
     }
 
+    // ================= FORECAST =================
+
     public ForecastResponse getForecast(String city) {
+
+        validateCity(city);
+
         try {
             JsonNode location = findLocation(city);
 
             double latitude = location.get("latitude").asDouble();
             double longitude = location.get("longitude").asDouble();
 
-            String actualCity = location.get("name").asText();
+            String actualCity = location.path("name").asText(city);
 
-            // Reuse same cached weather response
             String response = weatherCacheService.getCachedWeather(
-                    latitude,
-                    longitude
+                    latitude, longitude
             );
 
-            JsonNode daily = objectMapper.readTree(response).get("daily");
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode daily = root.path("daily");
+
+            if (!daily.isObject()) {
+                throw new IllegalStateException(
+                        "Daily forecast data missing from weather API"
+                );
+            }
+
+            JsonNode dates = daily.path("time");
+            JsonNode maxTemps = daily.path("temperature_2m_max");
+            JsonNode minTemps = daily.path("temperature_2m_min");
+            JsonNode rainProbability =
+                    daily.path("precipitation_probability_max");
+            JsonNode weatherCodes = daily.path("weather_code");
+
+            if (!dates.isArray()
+                    || !maxTemps.isArray()
+                    || !minTemps.isArray()) {
+
+                throw new IllegalStateException(
+                        "Invalid forecast response: required daily fields missing"
+                );
+            }
+
+            if (dates.isEmpty()) {
+                throw new IllegalStateException(
+                        "No forecast dates available"
+                );
+            }
 
             List<ForecastDay> forecast = new ArrayList<>();
 
-            JsonNode dates = daily.get("time");
-            JsonNode maxTemps = daily.get("temperature_2m_max");
-            JsonNode minTemps = daily.get("temperature_2m_min");
+            int count = Math.min(
+                    5,
+                    Math.min(
+                            dates.size(),
+                            Math.min(maxTemps.size(), minTemps.size())
+                    )
+            );
 
-            JsonNode rainProbability = daily.has(
-                    "precipitation_probability_max"
-            ) ? daily.get("precipitation_probability_max") : null;
-
-            JsonNode weatherCodes = daily.get("weather_code");
-
-            for (int i = 0; i < dates.size(); i++) {
+            for (int i = 0; i < count; i++) {
 
                 String dateStr = dates.get(i).asText();
 
+                double maxTemp = maxTemps.get(i).asDouble();
+                double minTemp = minTemps.get(i).asDouble();
+
+                int code = weatherCodes.isArray()
+                        && weatherCodes.size() > i
+                        ? weatherCodes.get(i).asInt()
+                        : 0;
+
+                int precipProb = rainProbability.isArray()
+                        && rainProbability.size() > i
+                        ? rainProbability.get(i).asInt()
+                        : 0;
+
                 String dayLabel = formatDayLabel(dateStr, i);
-
-                int code = weatherCodes.get(i).asInt();
-
-                int precipProb = (
-                        rainProbability != null
-                                && rainProbability.has(i)
-                ) ? rainProbability.get(i).asInt() : 0;
 
                 forecast.add(
                         new ForecastDay(
                                 dateStr,
                                 dayLabel,
-                                maxTemps.get(i).asDouble(),
-                                minTemps.get(i).asDouble(),
+                                maxTemp,
+                                minTemp,
                                 precipProb,
                                 code,
                                 weatherCondition(code),
@@ -181,35 +237,76 @@ public class WeatherService {
                 );
             }
 
+            if (forecast.isEmpty()) {
+                throw new IllegalStateException(
+                        "Forecast list is empty"
+                );
+            }
+
             return new ForecastResponse(actualCity, forecast);
 
         } catch (Exception e) {
 
-            System.err.println("===== FORECAST API ERROR =====");
+            System.err.println("===== FORECAST ERROR =====");
             e.printStackTrace();
-            System.err.println("==============================");
+            System.err.println("==========================");
 
             throw new RuntimeException(
-                    "Unable to fetch forecast for " + city, e
+                    "Unable to fetch forecast for " + city
+                            + ": " + e.getMessage(), e
             );
         }
     }
 
+    // ================= CITY VALIDATION =================
+
+    private void validateCity(String city) {
+
+        if (city == null || city.isBlank()) {
+            throw new IllegalArgumentException(
+                    "City name cannot be empty"
+            );
+        }
+    }
+
+    // ================= GEOCODING =================
+
     private JsonNode findLocation(String city) throws Exception {
 
-        // Fetch location through geocoding cache
-        String response = geocodingCacheService.getCachedLocation(city);
+        String response = geocodingCacheService.getCachedLocation(
+                city.trim()
+        );
 
-        JsonNode results = objectMapper.readTree(response).get("results");
+        if (response == null || response.isBlank()) {
+            throw new IllegalStateException(
+                    "Empty response from geocoding service"
+            );
+        }
 
-        if (results == null || results.isEmpty()) {
+        JsonNode root = objectMapper.readTree(response);
+
+        JsonNode results = root.path("results");
+
+        if (!results.isArray() || results.isEmpty()) {
             throw new IllegalArgumentException(
                     "City not found: " + city
             );
         }
 
-        return results.get(0);
+        JsonNode location = results.get(0);
+
+        if (!location.hasNonNull("latitude")
+                || !location.hasNonNull("longitude")) {
+
+            throw new IllegalStateException(
+                    "Invalid location coordinates for: " + city
+            );
+        }
+
+        return location;
     }
+
+    // ================= DATE FORMAT =================
 
     private String formatDayLabel(String dateStr, int index) {
 
@@ -220,13 +317,17 @@ public class WeatherService {
             LocalDate date = LocalDate.parse(dateStr);
 
             return date.format(
-                    DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
+                    DateTimeFormatter.ofPattern(
+                            "EEE", Locale.ENGLISH
+                    )
             );
 
         } catch (Exception e) {
             return dateStr;
         }
     }
+
+    // ================= AGRICULTURE INSIGHTS =================
 
     private String getAgriStatusLevel(
             double temp,
@@ -236,8 +337,9 @@ public class WeatherService {
 
         if (weatherCode >= 51 || temp > 38 || temp < 5) {
             return "Warning";
+        }
 
-        } else if (temp > 32 || humidity > 85) {
+        if (temp > 32 || humidity > 85) {
             return "Caution";
         }
 
@@ -261,34 +363,32 @@ public class WeatherService {
     ) {
 
         if (weatherCode >= 51) {
-
             return String.format(
                     "Rain/Precipitation detected in %s. Delay fertilizer application and pesticide spraying to prevent runoff.",
                     city
             );
 
         } else if (temp > 35) {
-
             return String.format(
                     "High temperature (%.1f°C) detected. Ensure proper soil moisture and schedule irrigation during early morning hours.",
                     temp
             );
 
         } else if (humidity > 80) {
-
             return String.format(
                     "High atmospheric humidity (%d%%) increases fungal risk. Monitor leaf surface moisture closely.",
                     humidity
             );
 
         } else {
-
             return String.format(
                     "Current weather in %s (%.1f°C, %d%% humidity) is ideal for standard agricultural operations and crop maintenance.",
                     city, temp, humidity
             );
         }
     }
+
+    // ================= UV INDEX =================
 
     private String getUvLevel(double uvIndex) {
 
@@ -299,6 +399,8 @@ public class WeatherService {
 
         return "Extreme";
     }
+
+    // ================= WEATHER CONDITION =================
 
     private String weatherCondition(int code) {
 
@@ -312,9 +414,11 @@ public class WeatherService {
             case 80, 81, 82 -> "Rain showers";
             case 85, 86 -> "Snow showers";
             case 95, 96, 99 -> "Thunderstorm";
-            default -> "Clear";
+            default -> "Unknown";
         };
     }
+
+    // ================= WEATHER ICON =================
 
     private String weatherIcon(int code) {
 
@@ -323,7 +427,8 @@ public class WeatherService {
             case 1, 2, 3 -> "⛅";
             case 45, 48 -> "🌫️";
             case 51, 53, 55, 56, 57,
-                 61, 63, 65, 80, 81, 82 -> "🌧️";
+                 61, 63, 65, 66, 67,
+                 80, 81, 82 -> "🌧️";
             case 71, 73, 75, 77, 85, 86 -> "❄️";
             case 95, 96, 99 -> "⛈️";
             default -> "🌤️";
