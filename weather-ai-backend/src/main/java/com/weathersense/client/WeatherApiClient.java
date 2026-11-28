@@ -40,7 +40,7 @@ public class WeatherApiClient {
                             .queryParam("key", apiKey)
                             .queryParam("q", latitude + "," + longitude)
                             .queryParam("days", 3)
-                            .queryParam("aqi", "no")
+                            .queryParam("aqi", "yes")
                             .queryParam("alerts", "no")
                             .build())
                     .retrieve()

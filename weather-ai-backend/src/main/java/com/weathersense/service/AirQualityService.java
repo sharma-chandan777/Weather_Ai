@@ -1,12 +1,12 @@
+
 package com.weathersense.service;
+
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.weathersense.client.AirQualityApiClient;
 import com.weathersense.client.GeocodingApiClient;
 import com.weathersense.dto.AirQualityResponse;
 import org.springframework.stereotype.Service;
-// ✅ SAHI IMPORT (Yeh Paste Karein)
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class AirQualityService {
@@ -28,33 +28,58 @@ public class AirQualityService {
     public AirQualityResponse getAirQuality(String city) {
 
         try {
-            JsonNode results = objectMapper
-                    .readTree(geocodingApiClient.searchCity(city))
-                    .get("results");
 
-            if (results == null || results.isEmpty()) {
-                throw new IllegalArgumentException("City not found: " + city);
+            JsonNode results = objectMapper
+                    .readTree(geocodingApiClient.searchCity(city));
+
+            if (!results.isArray() || results.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "City not found: " + city
+                );
             }
 
             JsonNode location = results.get(0);
-            double latitude = location.get("latitude").asDouble();
-            double longitude = location.get("longitude").asDouble();
-            String actualCity = location.get("name").asText();
 
-            String response = airQualityApiClient.getAirQuality(latitude, longitude);
-            JsonNode current = objectMapper.readTree(response).get("current");
+            double latitude = location.path("lat").asDouble();
+            double longitude = location.path("lon").asDouble();
 
-            // Open-Meteo European AQI value (0 - 100+ scale)
-            double aqi = current.has("european_aqi") ? current.get("european_aqi").asDouble() : 0.0;
-            double pm25 = current.has("pm2_5") ? current.get("pm2_5").asDouble() : 0.0;
-            double pm10 = current.has("pm10") ? current.get("pm10").asDouble() : 0.0;
-            double co = current.has("carbon_monoxide") ? current.get("carbon_monoxide").asDouble() : 0.0;
+            String actualCity = location.path("name").asText(city);
 
-            // Compute status and description for React UI
+            String response = airQualityApiClient.getAirQuality(
+                    latitude, longitude
+            );
+
+            JsonNode root = objectMapper.readTree(response);
+
+            JsonNode current = root.path("current");
+            JsonNode airQuality = current.path("air_quality");
+
+            if (!airQuality.isObject()) {
+                throw new IllegalStateException(
+                        "Air quality data missing from WeatherAPI"
+                );
+            }
+
+            // WeatherAPI US EPA AQI
+            double aqi = airQuality.path(
+                    "us-epa-index"
+            ).asDouble(0.0);
+
+            double pm25 = airQuality.path(
+                    "pm2_5"
+            ).asDouble(0.0);
+
+            double pm10 = airQuality.path(
+                    "pm10"
+            ).asDouble(0.0);
+
+            double co = airQuality.path(
+                    "co"
+            ).asDouble(0.0);
+
             String status = getAQIStatus(aqi);
             String description = getAQIDescription(status);
 
-            // DTO signature: (city, aqi, status, description, pm25, pm10, co)
             return new AirQualityResponse(
                     actualCity,
                     aqi,
@@ -66,25 +91,50 @@ public class AirQualityService {
             );
 
         } catch (Exception e) {
-            throw new RuntimeException("Unable to fetch air quality for " + city, e);
+
+            System.err.println("===== AIR QUALITY ERROR =====");
+            e.printStackTrace();
+            System.err.println("=============================");
+
+            throw new RuntimeException(
+                    "Unable to fetch air quality for " + city, e
+            );
         }
     }
 
     private String getAQIStatus(double aqi) {
-        if (aqi <= 20) return "Good";
-        if (aqi <= 40) return "Fair";
-        if (aqi <= 60) return "Moderate";
-        if (aqi <= 80) return "Poor";
-        if (aqi <= 100) return "Very Poor";
-        return "Extremely Poor";
+
+        // US EPA AQI scale: 1 to 6
+
+        if (aqi <= 1) return "Good";
+        if (aqi <= 2) return "Moderate";
+        if (aqi <= 3) return "Poor";
+        if (aqi <= 4) return "Unhealthy";
+        if (aqi <= 5) return "Very Unhealthy";
+
+        return "Hazardous";
     }
 
     private String getAQIDescription(String status) {
+
         return switch (status) {
-            case "Good", "Fair" -> "Air quality is satisfactory and poses little to no risk.";
-            case "Moderate" -> "Acceptable air quality; sensitive individuals may experience slight irritation.";
-            case "Poor" -> "High pollution; outdoor activities should be reduced for sensitive groups.";
-            default -> "Unhealthy air quality; avoid prolonged outdoor exertion.";
+            case "Good" ->
+                    "Air quality is satisfactory and poses little to no risk.";
+
+            case "Moderate" ->
+                    "Acceptable air quality; sensitive individuals may experience slight irritation.";
+
+            case "Poor" ->
+                    "Air pollution is elevated; sensitive groups should limit prolonged outdoor activity.";
+
+            case "Unhealthy" ->
+                    "Unhealthy air quality; reduce prolonged outdoor exertion.";
+
+            case "Very Unhealthy" ->
+                    "Very unhealthy air quality; avoid prolonged outdoor activities.";
+
+            default ->
+                    "Hazardous air quality; avoid outdoor exertion and follow local health guidance.";
         };
     }
 }

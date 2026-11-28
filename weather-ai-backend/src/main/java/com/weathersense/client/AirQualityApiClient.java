@@ -1,5 +1,7 @@
+
 package com.weathersense.client;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -7,10 +9,15 @@ import org.springframework.web.client.RestClient;
 public class AirQualityApiClient {
 
     private final RestClient restClient;
+    private final String apiKey;
 
-    public AirQualityApiClient() {
+    public AirQualityApiClient(
+            @Value("${weather.api.key}") String apiKey
+    ) {
+        this.apiKey = apiKey;
+
         this.restClient = RestClient.builder()
-                .baseUrl("https://air-quality-api.open-meteo.com")
+                .baseUrl("https://api.weatherapi.com")
                 .build();
     }
 
@@ -21,17 +28,13 @@ public class AirQualityApiClient {
 
         return restClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/v1/air-quality")
-                        .queryParam("latitude", latitude)
-                        .queryParam("longitude", longitude)
+                        .path("/v1/current.json")
+                        .queryParam("key", apiKey)
                         .queryParam(
-                                "current",
-                                "european_aqi," +
-                                        "pm2_5," +
-                                        "pm10," +
-                                        "carbon_monoxide"
+                                "q",
+                                latitude + "," + longitude
                         )
-                        .queryParam("timezone", "auto")
+                        .queryParam("aqi", "yes")
                         .build())
                 .retrieve()
                 .body(String.class);
